@@ -1,13 +1,28 @@
 // All sounds generated with Web Audio API — no files needed!
 
 let audioCtx: AudioContext | null = null;
+let unlocked = false;
+
+const ACtor = typeof window !== 'undefined'
+  ? (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)
+  : null;
 
 function getCtx(): AudioContext {
-  if (!audioCtx) {
-    audioCtx = new AudioContext();
+  if (!audioCtx && ACtor) {
+    audioCtx = new ACtor();
   }
-  if (audioCtx.state === 'suspended') {
+  if (!audioCtx) throw new Error('No AudioContext');
+
+  // iOS Safari requires a user-gesture-driven unlock:
+  // play a silent buffer to unblock audio output.
+  if (!unlocked || audioCtx.state === 'suspended') {
+    const buf = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    src.start(0);
     audioCtx.resume();
+    unlocked = true;
   }
   return audioCtx;
 }
