@@ -1,58 +1,239 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt, mapStops } from '@/data/itinerary';
-import { playStampSound, playUncollectSound, playMissionSound, playVictoryFanfare, playMapSound } from './sounds';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt, mapStops, packingList, tripStartDate } from '@/data/itinerary';
+import { playStampSound, playUncollectSound, playMissionSound, playMissionCompleteSound, playDayCompleteSound, playVictoryFanfare, playMapSound, playCheckSound, playUncheckSound } from './sounds';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getCountdown() {
+  const start = new Date(tripStartDate + 'T00:00:00');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = Math.ceil((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return diff;
+}
+
+function getTodayDayId(): string | null {
+  const now = new Date();
+  for (const day of itinerary) {
+    const d = new Date(day.date + ', 2026');
+    if (d.toDateString() === now.toDateString()) return day.id;
+  }
+  return null;
+}
+
+const STORAGE_KEY = 'leo-adventure-v2';
+
+function loadSaved(): { questCompleted: Record<string, boolean>; packingChecked: Record<string, boolean> } {
+  if (typeof window === 'undefined') return { questCompleted: {}, packingChecked: {} };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { questCompleted: {}, packingChecked: {} };
+}
+
+// ─── Confetti Component ───────────────────────────────────────────────────────
+
+const CONFETTI_COLORS = ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6'];
+
+function Confetti({ count = 60, onDone }: { count?: number; onDone: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDone, 4000);
+    return () => clearTimeout(timer);
+  }, [onDone]);
+
+  const pieces = useMemo(() =>
+    Array.from({ length: count }).map((_, i) => ({
+      left: `${Math.random() * 100}%`,
+      width: `${Math.random() * 8 + 4}px`,
+      height: `${Math.random() * 12 + 4}px`,
+      bg: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      radius: Math.random() > 0.5 ? '50%' : Math.random() > 0.5 ? '2px' : '0',
+      delay: `${Math.random() * 1.5}s`,
+      duration: `${Math.random() * 2 + 2}s`,
+    }))
+  , [count]);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[100]">
+      {pieces.map((p, i) => (
+        <div
+          key={i}
+          className="absolute animate-confetti"
+          style={{
+            left: p.left,
+            top: '-3%',
+            width: p.width,
+            height: p.height,
+            backgroundColor: p.bg,
+            borderRadius: p.radius,
+            animationDelay: p.delay,
+            animationDuration: p.duration,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [scrolled, setScrolled] = useState(false);
-  const [collected, setCollected] = useState<Record<string, boolean>>({});
+  const [questCompleted, setQuestCompleted] = useState<Record<string, boolean>>({});
   const [expandedMissions, setExpandedMissions] = useState<Record<string, boolean>>({});
-  const [justCollected, setJustCollected] = useState<string | null>(null);
-  const prevCountRef = useRef(0);
+  const [packingChecked, setPackingChecked] = useState<Record<string, boolean>>({});
+  const [justCompletedQuest, setJustCompletedQuest] = useState<string | null>(null);
+  const [justCompletedDay, setJustCompletedDay] = useState<string | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [mapAnimated, setMapAnimated] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
+  const mapRef = useRef<HTMLDivElement>(null);
+  const prevDayCompleteRef = useRef<Record<string, boolean>>({});
+  const prevTotalRef = useRef(0);
+
+  // ─── Load from localStorage ───────────────────────────────────────────────
+  useEffect(() => {
+    const saved = loadSaved();
+    setQuestCompleted(saved.questCompleted);
+    setPackingChecked(saved.packingChecked);
+    setLoaded(true);
+  }, []);
+
+  // ─── Save to localStorage ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!loaded) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ questCompleted, packingChecked }));
+  }, [questCompleted, packingChecked, loaded]);
+
+  // ─── Scroll handler ──────────────────────────────────────────────────────
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // ─── Map animation via Intersection Observer ─────────────────────────────
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setMapAnimated(true); observer.disconnect(); } },
+      { threshold: 0.3 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // ─── Computed: quest & day progress ──────────────────────────────────────
+  const dayMissionIds = useMemo(() =>
+    itinerary.map(day => ({
+      dayId: day.id,
+      missionIds: day.quests.filter(q => q.leoMission).map(q => q.id),
+    }))
+  , []);
+
+  const dayCompleted = useMemo(() =>
+    Object.fromEntries(
+      dayMissionIds.map(({ dayId, missionIds }) => [
+        dayId,
+        missionIds.length > 0 && missionIds.every(id => questCompleted[id]),
+      ])
+    )
+  , [questCompleted, dayMissionIds]);
+
+  const totalMissions = useMemo(() =>
+    dayMissionIds.reduce((sum, d) => sum + d.missionIds.length, 0)
+  , [dayMissionIds]);
+
+  const completedMissions = Object.values(questCompleted).filter(Boolean).length;
+  const allComplete = completedMissions === totalMissions && totalMissions > 0;
+  const daysCompleted = Object.values(dayCompleted).filter(Boolean).length;
+
+  const countdown = getCountdown();
+  const todayDayId = getTodayDayId();
+
+  // ─── Actions ─────────────────────────────────────────────────────────────
+
   const scrollToDay = (id: string) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const toggleStamp = (dayId: string) => {
-    const wasCollected = collected[dayId];
-    const next = { ...collected, [dayId]: !wasCollected };
-    setCollected(next);
-
-    if (!wasCollected) {
-      playStampSound();
-      setJustCollected(dayId);
-      setTimeout(() => setJustCollected(null), 600);
-
-      // Check if all collected after this one
-      const count = Object.values(next).filter(Boolean).length;
-      if (count === 4 && prevCountRef.current < 4) {
-        setTimeout(() => playVictoryFanfare(), 400);
-      }
-      prevCountRef.current = count;
-    } else {
-      playUncollectSound();
-      prevCountRef.current = Object.values(next).filter(Boolean).length;
-    }
-  };
-
-  const toggleMission = (questId: string) => {
+  const toggleMission = useCallback((questId: string) => {
     playMissionSound();
-    setExpandedMissions((prev) => ({ ...prev, [questId]: !prev[questId] }));
-  };
+    setExpandedMissions(prev => ({ ...prev, [questId]: !prev[questId] }));
+  }, []);
 
-  const collectedCount = Object.values(collected).filter(Boolean).length;
+  const completeMission = useCallback((questId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const wasCompleted = questCompleted[questId];
 
+    if (wasCompleted) {
+      // Uncomplete
+      playUncollectSound();
+      setQuestCompleted(prev => ({ ...prev, [questId]: false }));
+      return;
+    }
+
+    // Complete!
+    playMissionCompleteSound();
+    const next = { ...questCompleted, [questId]: true };
+    setQuestCompleted(next);
+    setJustCompletedQuest(questId);
+    setTimeout(() => setJustCompletedQuest(null), 800);
+
+    // Check if a day just completed
+    for (const { dayId, missionIds } of dayMissionIds) {
+      const wasComplete = prevDayCompleteRef.current[dayId];
+      const isNowComplete = missionIds.length > 0 && missionIds.every(id => next[id]);
+      if (isNowComplete && !wasComplete) {
+        setTimeout(() => {
+          playDayCompleteSound();
+          setJustCompletedDay(dayId);
+          setTimeout(() => setJustCompletedDay(null), 1200);
+        }, 500);
+      }
+    }
+
+    // Check if ALL missions now complete
+    const newTotal = Object.values(next).filter(Boolean).length;
+    if (newTotal === totalMissions && prevTotalRef.current < totalMissions) {
+      setTimeout(() => {
+        playVictoryFanfare();
+        setShowConfetti(true);
+      }, 1000);
+    }
+
+    prevTotalRef.current = newTotal;
+    prevDayCompleteRef.current = Object.fromEntries(
+      dayMissionIds.map(({ dayId, missionIds }) => [
+        dayId,
+        missionIds.length > 0 && missionIds.every(id => next[id]),
+      ])
+    );
+  }, [questCompleted, dayMissionIds, totalMissions]);
+
+  const togglePacking = useCallback((id: string) => {
+    const wasChecked = packingChecked[id];
+    if (wasChecked) {
+      playUncheckSound();
+    } else {
+      playCheckSound();
+    }
+    setPackingChecked(prev => ({ ...prev, [id]: !prev[id] }));
+  }, [packingChecked]);
+
+  const packedCount = Object.values(packingChecked).filter(Boolean).length;
+
+  // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <>
+      {showConfetti && <Confetti onDone={() => setShowConfetti(false)} />}
+
       {/* Sticky nav */}
       <nav
         className={`fixed top-0 w-full z-50 transition-all duration-200 ${
@@ -65,18 +246,21 @@ export default function Home() {
           <span className={`text-sm font-bold tracking-wide transition-colors ${scrolled ? 'text-amber-900' : 'text-white'}`}>
             🗺️ Leo&apos;s Adventure
           </span>
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-center">
             {itinerary.map((day) => (
               <button
                 key={day.id}
                 onClick={() => scrollToDay(day.id)}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
+                className={`relative px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
                   scrolled
                     ? 'text-amber-800 hover:bg-amber-100'
                     : 'text-white/70 hover:text-white'
-                }`}
+                } ${todayDayId === day.id ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
               >
                 {day.mapEmoji}
+                {dayCompleted[day.id] && (
+                  <span className="absolute -top-1 -right-1 text-[8px]">✅</span>
+                )}
               </button>
             ))}
           </div>
@@ -107,8 +291,45 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Treasure Map */}
+      {/* Countdown */}
       <div className="max-w-2xl mx-auto px-5 -mt-6 relative z-20">
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-5 shadow-lg text-center">
+          {countdown > 1 ? (
+            <>
+              <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-1">Adventure begins in</p>
+              <p className="text-5xl font-black text-white animate-count-bounce">{countdown}</p>
+              <p className="text-white font-bold text-lg mt-1">
+                {countdown === 1 ? 'sleep' : 'sleeps'} to go!
+              </p>
+            </>
+          ) : countdown === 1 ? (
+            <>
+              <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-1">Adventure begins</p>
+              <p className="text-4xl font-black text-white animate-count-bounce">TOMORROW!</p>
+              <p className="text-white font-bold text-sm mt-1">Get your explorer pack ready!</p>
+            </>
+          ) : countdown === 0 ? (
+            <>
+              <p className="text-4xl font-black text-white animate-count-bounce">ADVENTURE DAY!</p>
+              <p className="text-white font-bold text-sm mt-1">Let&apos;s GOOOOO! 🚗💨</p>
+            </>
+          ) : countdown >= -3 ? (
+            <>
+              <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-1">Adventure in progress!</p>
+              <p className="text-3xl font-black text-white">Day {Math.abs(countdown) + 1} of 4</p>
+              <p className="text-white font-bold text-sm mt-1">Keep exploring, Leo! 🌟</p>
+            </>
+          ) : (
+            <>
+              <p className="text-3xl font-black text-white">What an Adventure! 🏆</p>
+              <p className="text-white font-bold text-sm mt-1">You did it, explorer!</p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Treasure Map */}
+      <div className="max-w-2xl mx-auto px-5 mt-6" ref={mapRef}>
         <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 shadow-lg">
           <h2 className="text-center text-amber-900 font-extrabold text-lg mb-4">
             🗺️ The Adventure Map
@@ -118,14 +339,19 @@ export default function Home() {
             {/* Parchment background */}
             <rect x="0" y="0" width="100" height="100" fill="#fef3c7" rx="4" />
 
-            {/* Dotted trail path */}
+            {/* Dotted trail path — animated */}
             <path
               d={`M ${mapStops[0].x} ${mapStops[0].y} ${mapStops.slice(1, -1).map(s => `L ${s.x} ${s.y}`).join(' ')}`}
               fill="none"
               stroke="#92400e"
               strokeWidth="0.8"
-              strokeDasharray="2 1.5"
+              strokeDasharray={mapAnimated ? '2 1.5' : '0'}
               strokeLinecap="round"
+              style={{
+                strokeDashoffset: 0,
+                transition: 'stroke-dasharray 2s ease-in-out',
+              }}
+              opacity={mapAnimated ? 1 : 0}
             />
             {/* Return path */}
             <path
@@ -134,7 +360,8 @@ export default function Home() {
               stroke="#92400e"
               strokeWidth="0.5"
               strokeDasharray="1.5 2"
-              opacity="0.4"
+              opacity={mapAnimated ? 0.4 : 0}
+              style={{ transition: 'opacity 1s ease-in-out 1.5s' }}
             />
 
             {/* Ocean area */}
@@ -144,46 +371,68 @@ export default function Home() {
             {/* Map label */}
             <text x="50" y="6" fontSize="2" fill="#92400e" fontWeight="bold" textAnchor="middle" opacity="0.4">CALIFORNIA</text>
 
-            {/* Stop markers — tappable with sounds */}
-            {mapStops.slice(0, -1).map((stop, i) => (
-              <g
-                key={stop.name}
-                onClick={() => playMapSound(i)}
-                style={{ cursor: 'pointer' }}
-              >
-                {/* Larger tap target */}
-                <circle cx={stop.x} cy={stop.y} r="6" fill="transparent" />
-                {/* Marker glow */}
-                <circle cx={stop.x} cy={stop.y} r="4" fill="#fbbf24" opacity="0.3" />
-                {/* Marker */}
-                <circle cx={stop.x} cy={stop.y} r="2.5" fill="#fef3c7" stroke="#92400e" strokeWidth="0.5" />
-                <text x={stop.x} y={stop.y + 1} fontSize="3" textAnchor="middle" dominantBaseline="middle">
-                  {stop.emoji}
-                </text>
-                {/* Label */}
-                <text
-                  x={stop.x + (i === 0 ? 5 : i === 4 ? 5 : -1)}
-                  y={stop.y + (i === 0 ? -4 : i === 2 ? -4 : i === 4 ? -5 : 6)}
-                  fontSize="2.2"
-                  fill="#78350f"
-                  fontWeight="bold"
+            {/* YOU ARE HERE — pulsing glow on today's stop */}
+            {todayDayId && (() => {
+              const today = itinerary.find(d => d.id === todayDayId);
+              if (!today) return null;
+              const stop = mapStops[today.mapStopIndex];
+              return (
+                <circle
+                  cx={stop.x}
+                  cy={stop.y}
+                  r="5"
+                  fill="#f59e0b"
+                  className="animate-pulse-glow"
+                />
+              );
+            })()}
+
+            {/* Stop markers — ALL tappable including Home return */}
+            {mapStops.map((stop, i) => {
+              // Skip the duplicate home at the end if it's the same as index 0
+              if (i === mapStops.length - 1) return null;
+              return (
+                <g
+                  key={`${stop.name}-${i}`}
+                  onClick={() => playMapSound(i)}
+                  style={{ cursor: 'pointer' }}
+                  opacity={mapAnimated ? 1 : 0}
+                  className="transition-opacity duration-500"
                 >
-                  {stop.name}
-                </text>
-                {/* Day number */}
-                {i > 0 && i < 5 && (
-                  <text
-                    x={stop.x + (i === 4 ? 5 : -1)}
-                    y={stop.y + (i === 2 ? -2 : i === 4 ? -3 : 8.5)}
-                    fontSize="1.8"
-                    fill="#92400e"
-                    opacity="0.6"
-                  >
-                    Day {i <= 2 ? 1 : i === 3 ? 2 : '3–4'}
+                  {/* Larger tap target */}
+                  <circle cx={stop.x} cy={stop.y} r="6" fill="transparent" />
+                  {/* Marker glow */}
+                  <circle cx={stop.x} cy={stop.y} r="4" fill="#fbbf24" opacity="0.3" />
+                  {/* Marker */}
+                  <circle cx={stop.x} cy={stop.y} r="2.5" fill="#fef3c7" stroke="#92400e" strokeWidth="0.5" />
+                  <text x={stop.x} y={stop.y + 1} fontSize="3" textAnchor="middle" dominantBaseline="middle">
+                    {stop.emoji}
                   </text>
-                )}
-              </g>
-            ))}
+                  {/* Label */}
+                  <text
+                    x={stop.x + (i === 0 ? 5 : i === 4 ? 5 : -1)}
+                    y={stop.y + (i === 0 ? -4 : i === 2 ? -4 : i === 4 ? -5 : 6)}
+                    fontSize="2.2"
+                    fill="#78350f"
+                    fontWeight="bold"
+                  >
+                    {stop.name}
+                  </text>
+                  {/* Day number */}
+                  {i > 0 && i < 5 && (
+                    <text
+                      x={stop.x + (i === 4 ? 5 : -1)}
+                      y={stop.y + (i === 2 ? -2 : i === 4 ? -3 : 8.5)}
+                      fontSize="1.8"
+                      fill="#92400e"
+                      opacity="0.6"
+                    >
+                      Day {i <= 2 ? 1 : i === 3 ? 2 : '3–4'}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
 
             {/* X marks the treasure */}
             <text x={mapStops[4].x - 0.5} y={mapStops[4].y + 7} fontSize="3" fill="#dc2626" fontWeight="bold" opacity="0.7">
@@ -207,152 +456,332 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Stamp Passport */}
+      {/* Explorer's Pack — Packing Checklist */}
       <div className="max-w-2xl mx-auto px-5 mt-6">
-        <div className="bg-amber-900 rounded-2xl p-5 text-center shadow-lg">
-          <h2 className="text-amber-200 font-extrabold text-sm uppercase tracking-widest mb-1">
-            🛂 Leo&apos;s Adventure Passport
+        <div className="bg-emerald-900 rounded-2xl p-5 shadow-lg">
+          <h2 className="text-emerald-200 font-extrabold text-sm uppercase tracking-widest mb-1 text-center">
+            🎒 Explorer&apos;s Pack
           </h2>
-          <p className="text-amber-400/60 text-xs mb-4">
-            Tap a stamp when you complete each day!
+          <p className="text-emerald-400/60 text-xs mb-4 text-center">
+            Tap each item when it&apos;s packed!
           </p>
-          <div className="flex justify-center gap-3 sm:gap-5">
-            {itinerary.map((day) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {packingList.map((item) => (
               <button
-                key={day.id}
-                onClick={() => toggleStamp(day.id)}
-                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-300 ${
-                  collected[day.id]
-                    ? 'bg-amber-500/30 scale-110 shadow-lg shadow-amber-500/20'
-                    : 'bg-amber-800/50 opacity-50 grayscale hover:opacity-70'
-                } ${justCollected === day.id ? 'animate-bounce' : ''}`}
+                key={item.id}
+                onClick={() => togglePacking(item.id)}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-left active:scale-[0.97] ${
+                  packingChecked[item.id]
+                    ? 'bg-emerald-500/30 border-2 border-emerald-400/50'
+                    : 'bg-emerald-800/50 border-2 border-transparent hover:border-emerald-600/30'
+                }`}
               >
-                <span className="text-3xl sm:text-4xl">{day.stamp}</span>
-                <span className={`text-xs font-bold ${collected[day.id] ? 'text-amber-200' : 'text-amber-500/50'}`}>
-                  {day.stampName}
+                <span className={`text-lg transition-all ${packingChecked[item.id] ? '' : 'grayscale opacity-50'}`}>
+                  {item.emoji}
                 </span>
-                {collected[day.id] && (
-                  <span className="text-amber-400 text-xs font-bold">✓</span>
+                <span className={`text-xs font-bold transition-colors ${
+                  packingChecked[item.id] ? 'text-emerald-200 line-through' : 'text-emerald-400/70'
+                }`}>
+                  {item.label}
+                </span>
+                {packingChecked[item.id] && (
+                  <span className="text-emerald-400 text-xs ml-auto">✓</span>
                 )}
               </button>
             ))}
           </div>
-          <p className="text-amber-400 text-xs mt-4 font-bold">
-            {collectedCount === 0
-              ? 'No stamps yet — the adventure awaits!'
-              : collectedCount === 4
-              ? '🎉 ALL STAMPS COLLECTED! You are a TRUE EXPLORER! 🎉'
-              : `${collectedCount} of 4 stamps collected!`}
+          <p className="text-emerald-400 text-xs mt-4 font-bold text-center">
+            {packedCount === 0
+              ? 'Nothing packed yet — let\'s get ready!'
+              : packedCount === packingList.length
+              ? '🎉 ALL PACKED! Ready for adventure!'
+              : `${packedCount} of ${packingList.length} items packed!`}
+          </p>
+        </div>
+      </div>
+
+      {/* Adventure Passport — Day stamps + overall progress */}
+      <div className="max-w-2xl mx-auto px-5 mt-6">
+        <div className="bg-amber-900 rounded-2xl p-5 shadow-lg">
+          <h2 className="text-amber-200 font-extrabold text-sm uppercase tracking-widest mb-1 text-center">
+            🛂 Leo&apos;s Adventure Passport
+          </h2>
+          <p className="text-amber-400/60 text-xs mb-4 text-center">
+            Complete missions to earn stamps! Day stamps unlock when all missions are done.
+          </p>
+
+          {/* Overall progress bar */}
+          <div className="mb-5">
+            <div className="flex justify-between text-xs text-amber-400/80 font-bold mb-1">
+              <span>🎖️ {completedMissions} of {totalMissions} missions</span>
+              <span>{Math.round((completedMissions / totalMissions) * 100)}%</span>
+            </div>
+            <div className="h-3 bg-amber-950 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all duration-700 ease-out"
+                style={{ width: `${(completedMissions / totalMissions) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Day stamps */}
+          <div className="flex justify-center gap-3 sm:gap-5">
+            {itinerary.map((day) => {
+              const missionIds = day.quests.filter(q => q.leoMission).map(q => q.id);
+              const dayDone = dayCompleted[day.id];
+              const dayProgress = missionIds.filter(id => questCompleted[id]).length;
+              return (
+                <div
+                  key={day.id}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-500 ${
+                    dayDone
+                      ? 'bg-amber-500/30 scale-110 shadow-lg shadow-amber-500/20'
+                      : 'bg-amber-800/50 opacity-60'
+                  } ${justCompletedDay === day.id ? 'animate-bounce' : ''}`}
+                >
+                  <span className={`text-3xl sm:text-4xl transition-all duration-300 ${dayDone ? '' : 'grayscale'}`}>
+                    {day.stamp}
+                  </span>
+                  <span className={`text-[10px] font-bold ${dayDone ? 'text-amber-200' : 'text-amber-500/50'}`}>
+                    {day.stampName}
+                  </span>
+                  {/* Mini progress dots */}
+                  <div className="flex gap-0.5">
+                    {missionIds.map((mid) => (
+                      <div
+                        key={mid}
+                        className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+                          questCompleted[mid] ? 'bg-amber-400' : 'bg-amber-700'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[9px] text-amber-500/60 font-medium">
+                    {dayProgress}/{missionIds.length}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="text-amber-400 text-xs mt-4 font-bold text-center">
+            {allComplete
+              ? '🎉 ALL MISSIONS COMPLETE! LEGENDARY EXPLORER! 🎉'
+              : daysCompleted > 0
+              ? `${daysCompleted} of 4 day stamps earned!`
+              : 'Complete missions to earn your stamps!'}
           </p>
         </div>
       </div>
 
       {/* Days */}
       <main className="max-w-2xl mx-auto px-5 py-12">
-        {itinerary.map((day) => (
-          <section key={day.id} id={day.id} className="mb-20 scroll-mt-20">
-            {/* Day image banner */}
-            <div className="relative h-48 sm:h-56 rounded-xl overflow-hidden mb-6">
-              <img
-                src={day.image}
-                alt={day.imageAlt}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-amber-950/70 via-black/10 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-5">
-                <p className="text-amber-300 text-xs font-bold uppercase tracking-widest mb-1">
-                  Day {day.id === 'saturday' ? 1 : day.id === 'sunday' ? 2 : day.id === 'monday' ? 3 : 4} · {day.date}
-                </p>
-                <h2 className="text-2xl font-extrabold text-white">
-                  {day.mapEmoji} {day.dayOfWeek} — {day.subtitle}
-                </h2>
-              </div>
-              <div className="absolute top-4 right-4">
-                <span className="text-3xl">{day.stamp}</span>
-              </div>
-            </div>
+        {itinerary.map((day) => {
+          const isToday = todayDayId === day.id;
+          const missionIds = day.quests.filter(q => q.leoMission).map(q => q.id);
+          const dayDone = dayCompleted[day.id];
+          const dayProgress = missionIds.filter(id => questCompleted[id]).length;
 
-            {/* Quests */}
-            <div className="space-y-6">
-              {day.quests.map((quest) => (
-                <div key={quest.id} className="group">
-                  {/* Time + emoji line */}
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-base">{quest.emoji}</span>
-                    <span className="text-sm font-bold text-amber-900">
-                      {quest.time}
-                    </span>
-                    {quest.duration && (
-                      <span className="text-xs text-stone-400">
-                        · {quest.duration}
-                      </span>
-                    )}
-                    {quest.driveTime && (
-                      <span className="text-xs text-stone-400">
-                        · {quest.driveTime}
-                      </span>
-                    )}
-                  </div>
+          return (
+            <section
+              key={day.id}
+              id={day.id}
+              className={`mb-20 scroll-mt-20 ${isToday ? 'ring-2 ring-amber-400 ring-offset-4 ring-offset-stone-50 rounded-2xl' : ''}`}
+            >
+              {/* Today banner */}
+              {isToday && (
+                <div className="bg-amber-400 text-amber-900 text-xs font-black uppercase tracking-widest text-center py-1.5 rounded-t-xl -mb-2 relative z-10">
+                  📍 You Are Here — Today&apos;s Adventure!
+                </div>
+              )}
 
-                  {/* Title */}
-                  <h3 className="text-base font-extrabold text-stone-800 mb-1">
-                    {quest.title}
-                    {quest.optional && (
-                      <span className="ml-2 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                        Optional
-                      </span>
-                    )}
-                  </h3>
-
-                  {/* Description */}
-                  <p className="text-sm text-stone-600 leading-relaxed">
-                    {quest.description}
+              {/* Day image banner */}
+              <div className="relative h-48 sm:h-56 rounded-xl overflow-hidden mb-6">
+                <img
+                  src={day.image}
+                  alt={day.imageAlt}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-amber-950/70 via-black/10 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-5">
+                  <p className="text-amber-300 text-xs font-bold uppercase tracking-widest mb-1">
+                    Day {day.id === 'saturday' ? 1 : day.id === 'sunday' ? 2 : day.id === 'monday' ? 3 : 4} · {day.date}
                   </p>
+                  <h2 className="text-2xl font-extrabold text-white">
+                    {day.mapEmoji} {day.dayOfWeek} — {day.subtitle}
+                  </h2>
+                </div>
+                <div className="absolute top-4 right-4 flex items-center gap-2">
+                  <span className={`text-3xl ${dayDone ? '' : 'grayscale opacity-50'}`}>{day.stamp}</span>
+                </div>
+                {/* Day progress badge */}
+                <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1">
+                  <span className="text-xs font-bold text-white">
+                    {dayProgress}/{missionIds.length} ⭐
+                  </span>
+                </div>
+              </div>
 
-                  {/* Leo's Mission — tappable! */}
-                  {quest.leoMission && (
-                    <button
-                      onClick={() => toggleMission(quest.id)}
-                      className={`mt-2 w-full text-left bg-amber-50 border-2 rounded-lg px-4 py-3 transition-all duration-200 active:scale-[0.98] ${
-                        expandedMissions[quest.id]
-                          ? 'border-amber-400 shadow-md shadow-amber-200/50 bg-amber-100'
-                          : 'border-amber-200 hover:border-amber-300'
+              {/* Day stamp collection — shows earned quest stamps */}
+              {dayProgress > 0 && (
+                <div className="mb-6 flex flex-wrap gap-2 justify-center">
+                  {day.quests.filter(q => q.questStamp && questCompleted[q.id]).map(q => (
+                    <span
+                      key={q.id}
+                      className="inline-flex items-center gap-1 bg-amber-100 border border-amber-300 rounded-full px-2.5 py-1 animate-stamp-pop"
+                    >
+                      <span className="text-sm">{q.questStamp}</span>
+                      <span className="text-[10px] font-bold text-amber-800">{q.questStampName}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Quests */}
+              <div className="space-y-6">
+                {day.quests.map((quest) => {
+                  const isCompleted = questCompleted[quest.id];
+                  const isExpanded = expandedMissions[quest.id];
+                  const isJustDone = justCompletedQuest === quest.id;
+
+                  return (
+                    <div
+                      key={quest.id}
+                      className={`group transition-all duration-300 ${
+                        isCompleted ? 'pl-3 border-l-4 border-emerald-400' : ''
                       }`}
                     >
-                      <p className="text-xs text-amber-600 font-bold uppercase tracking-wider mb-1">
-                        {expandedMissions[quest.id] ? '🔓 Leo\'s Mission' : '🔒 Tap for Leo\'s Mission!'}
+                      {/* Time + emoji line */}
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="text-base">{quest.emoji}</span>
+                        <span className="text-sm font-bold text-amber-900">
+                          {quest.time}
+                        </span>
+                        {quest.duration && (
+                          <span className="text-xs text-stone-400">
+                            · {quest.duration}
+                          </span>
+                        )}
+                        {quest.driveTime && (
+                          <span className="text-xs text-stone-400">
+                            · {quest.driveTime}
+                          </span>
+                        )}
+                        {isCompleted && quest.questStamp && (
+                          <span className={`ml-auto text-lg ${isJustDone ? 'animate-stamp-pop' : ''}`}>
+                            {quest.questStamp}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Title */}
+                      <h3 className="text-base font-extrabold text-stone-800 mb-1">
+                        {quest.title}
+                        {quest.optional && (
+                          <span className="ml-2 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                            Optional
+                          </span>
+                        )}
+                      </h3>
+
+                      {/* Description */}
+                      <p className="text-sm text-stone-600 leading-relaxed">
+                        {quest.description}
                       </p>
-                      {expandedMissions[quest.id] && (
-                        <p className="text-sm text-amber-900 font-bold leading-relaxed">
-                          {quest.leoMission}
+
+                      {/* Leo's Mission — tappable to reveal, completable! */}
+                      {quest.leoMission && (
+                        <div className="mt-2">
+                          <button
+                            onClick={() => !isCompleted && toggleMission(quest.id)}
+                            className={`w-full text-left rounded-lg px-4 py-3 transition-all duration-200 active:scale-[0.98] border-2 ${
+                              isCompleted
+                                ? 'bg-emerald-50 border-emerald-300 shadow-md shadow-emerald-200/30'
+                                : isExpanded
+                                ? 'bg-amber-100 border-amber-400 shadow-md shadow-amber-200/50'
+                                : 'bg-amber-50 border-amber-200 hover:border-amber-300'
+                            }`}
+                          >
+                            {isCompleted ? (
+                              <>
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider">
+                                    ✅ Mission Complete!
+                                  </p>
+                                  <span className="text-lg">{quest.questStamp}</span>
+                                </div>
+                                <p className="text-sm text-emerald-800 font-bold leading-relaxed mt-1 line-through opacity-70">
+                                  {quest.leoMission}
+                                </p>
+                                <button
+                                  onClick={(e) => completeMission(quest.id, e)}
+                                  className="mt-2 text-xs text-emerald-600/60 hover:text-emerald-600 transition-colors"
+                                >
+                                  Undo
+                                </button>
+                              </>
+                            ) : isExpanded ? (
+                              <>
+                                <p className="text-xs text-amber-600 font-bold uppercase tracking-wider mb-1">
+                                  🔓 Leo&apos;s Mission
+                                </p>
+                                <p className="text-sm text-amber-900 font-bold leading-relaxed">
+                                  {quest.leoMission}
+                                </p>
+                                <button
+                                  onClick={(e) => completeMission(quest.id, e)}
+                                  className="mt-3 w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-2.5 rounded-lg transition-all active:scale-[0.97] shadow-md"
+                                >
+                                  {quest.questStamp} Complete Mission!
+                                </button>
+                              </>
+                            ) : (
+                              <p className="text-xs text-amber-600 font-bold uppercase tracking-wider">
+                                🔒 Tap for Leo&apos;s Mission!
+                              </p>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Confirmed badge */}
+                      {quest.confirmed && (
+                        <p className="text-xs text-emerald-700 mt-2 font-medium">
+                          {quest.confirmed}
                         </p>
                       )}
-                    </button>
-                  )}
 
-                  {/* Confirmed badge */}
-                  {quest.confirmed && (
-                    <p className="text-xs text-emerald-700 mt-2 font-medium">
-                      {quest.confirmed}
-                    </p>
-                  )}
+                      {/* Link */}
+                      {quest.link && (
+                        <a
+                          href={quest.link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block text-xs text-stone-400 hover:text-stone-600 mt-2 underline underline-offset-2 decoration-stone-300 hover:decoration-stone-500 transition-colors"
+                        >
+                          {quest.link.label}
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
-                  {/* Link */}
-                  {quest.link && (
-                    <a
-                      href={quest.link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block text-xs text-stone-400 hover:text-stone-600 mt-2 underline underline-offset-2 decoration-stone-300 hover:decoration-stone-500 transition-colors"
-                    >
-                      {quest.link.label}
-                    </a>
-                  )}
+              {/* Day complete celebration */}
+              {dayDone && (
+                <div className="mt-8 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl p-5 text-center shadow-lg">
+                  <p className="text-3xl mb-2">{day.stamp}</p>
+                  <p className="text-white font-extrabold text-lg">
+                    Day {day.id === 'saturday' ? 1 : day.id === 'sunday' ? 2 : day.id === 'monday' ? 3 : 4} Complete!
+                  </p>
+                  <p className="text-white/80 text-sm font-medium mt-1">
+                    &ldquo;{day.stampName}&rdquo; stamp earned!
+                  </p>
                 </div>
-              ))}
-            </div>
-          </section>
-        ))}
+              )}
+            </section>
+          );
+        })}
       </main>
 
       {/* Footer */}
@@ -365,6 +794,11 @@ export default function Home() {
           <p className="text-xs text-amber-400/50 mt-2">
             {tripTitle} · {tripSubtitle}
           </p>
+          {allComplete && (
+            <p className="text-amber-300 font-bold text-xs mt-3 animate-pulse">
+              🌟 {completedMissions} missions completed · Legendary Explorer Status 🌟
+            </p>
+          )}
         </div>
       </footer>
     </>
