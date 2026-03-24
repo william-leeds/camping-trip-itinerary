@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt, mapStops } from '@/data/itinerary';
+import { playStampSound, playUncollectSound, playMissionSound, playVictoryFanfare, playMapSound } from './sounds';
 
 export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const [collected, setCollected] = useState<Record<string, boolean>>({});
+  const [expandedMissions, setExpandedMissions] = useState<Record<string, boolean>>({});
+  const [justCollected, setJustCollected] = useState<string | null>(null);
+  const prevCountRef = useRef(0);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -19,7 +23,30 @@ export default function Home() {
   };
 
   const toggleStamp = (dayId: string) => {
-    setCollected((prev) => ({ ...prev, [dayId]: !prev[dayId] }));
+    const wasCollected = collected[dayId];
+    const next = { ...collected, [dayId]: !wasCollected };
+    setCollected(next);
+
+    if (!wasCollected) {
+      playStampSound();
+      setJustCollected(dayId);
+      setTimeout(() => setJustCollected(null), 600);
+
+      // Check if all collected after this one
+      const count = Object.values(next).filter(Boolean).length;
+      if (count === 4 && prevCountRef.current < 4) {
+        setTimeout(() => playVictoryFanfare(), 400);
+      }
+      prevCountRef.current = count;
+    } else {
+      playUncollectSound();
+      prevCountRef.current = Object.values(next).filter(Boolean).length;
+    }
+  };
+
+  const toggleMission = (questId: string) => {
+    playMissionSound();
+    setExpandedMissions((prev) => ({ ...prev, [questId]: !prev[questId] }));
   };
 
   const collectedCount = Object.values(collected).filter(Boolean).length;
@@ -74,6 +101,9 @@ export default function Home() {
           <p className="text-sm text-amber-200/70 mt-3">
             {travelers}
           </p>
+          <p className="text-xs text-amber-300/50 mt-2">
+            🔊 Tap things to hear sounds!
+          </p>
         </div>
       </header>
 
@@ -83,6 +113,7 @@ export default function Home() {
           <h2 className="text-center text-amber-900 font-extrabold text-lg mb-4">
             🗺️ The Adventure Map
           </h2>
+          <p className="text-center text-amber-700/60 text-xs mb-3">Tap the places to hear them!</p>
           <svg viewBox="0 0 100 100" className="w-full h-auto" style={{ maxHeight: '300px' }}>
             {/* Parchment background */}
             <rect x="0" y="0" width="100" height="100" fill="#fef3c7" rx="4" />
@@ -96,7 +127,7 @@ export default function Home() {
               strokeDasharray="2 1.5"
               strokeLinecap="round"
             />
-            {/* Return path (dashed lighter) */}
+            {/* Return path */}
             <path
               d={`M ${mapStops[mapStops.length - 2].x} ${mapStops[mapStops.length - 2].y} C 70 60, 40 30, ${mapStops[mapStops.length - 1].x} ${mapStops[mapStops.length - 1].y}`}
               fill="none"
@@ -110,12 +141,18 @@ export default function Home() {
             <ellipse cx="10" cy="70" rx="12" ry="20" fill="#bfdbfe" opacity="0.3" />
             <text x="6" y="70" fontSize="2.5" fill="#60a5fa" opacity="0.5">🌊</text>
 
-            {/* Map labels */}
+            {/* Map label */}
             <text x="50" y="6" fontSize="2" fill="#92400e" fontWeight="bold" textAnchor="middle" opacity="0.4">CALIFORNIA</text>
 
-            {/* Stop markers */}
+            {/* Stop markers — tappable with sounds */}
             {mapStops.slice(0, -1).map((stop, i) => (
-              <g key={stop.name}>
+              <g
+                key={stop.name}
+                onClick={() => playMapSound(i)}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* Larger tap target */}
+                <circle cx={stop.x} cy={stop.y} r="6" fill="transparent" />
                 {/* Marker glow */}
                 <circle cx={stop.x} cy={stop.y} r="4" fill="#fbbf24" opacity="0.3" />
                 {/* Marker */}
@@ -130,7 +167,6 @@ export default function Home() {
                   fontSize="2.2"
                   fill="#78350f"
                   fontWeight="bold"
-                  textAnchor={i === 0 ? 'start' : i === 4 ? 'start' : 'start'}
                 >
                   {stop.name}
                 </text>
@@ -149,7 +185,7 @@ export default function Home() {
               </g>
             ))}
 
-            {/* X marks the treasure at Terranea */}
+            {/* X marks the treasure */}
             <text x={mapStops[4].x - 0.5} y={mapStops[4].y + 7} fontSize="3" fill="#dc2626" fontWeight="bold" opacity="0.7">
               ✕
             </text>
@@ -189,14 +225,14 @@ export default function Home() {
                   collected[day.id]
                     ? 'bg-amber-500/30 scale-110 shadow-lg shadow-amber-500/20'
                     : 'bg-amber-800/50 opacity-50 grayscale hover:opacity-70'
-                }`}
+                } ${justCollected === day.id ? 'animate-bounce' : ''}`}
               >
                 <span className="text-3xl sm:text-4xl">{day.stamp}</span>
                 <span className={`text-xs font-bold ${collected[day.id] ? 'text-amber-200' : 'text-amber-500/50'}`}>
                   {day.stampName}
                 </span>
                 {collected[day.id] && (
-                  <span className="text-amber-400 text-xs font-bold">✓ Collected!</span>
+                  <span className="text-amber-400 text-xs font-bold">✓</span>
                 )}
               </button>
             ))}
@@ -231,7 +267,6 @@ export default function Home() {
                   {day.mapEmoji} {day.dayOfWeek} — {day.subtitle}
                 </h2>
               </div>
-              {/* Stamp badge */}
               <div className="absolute top-4 right-4">
                 <span className="text-3xl">{day.stamp}</span>
               </div>
@@ -274,13 +309,25 @@ export default function Home() {
                     {quest.description}
                   </p>
 
-                  {/* Leo's Mission */}
+                  {/* Leo's Mission — tappable! */}
                   {quest.leoMission && (
-                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                      <p className="text-sm text-amber-900 font-bold leading-relaxed">
-                        {quest.leoMission}
+                    <button
+                      onClick={() => toggleMission(quest.id)}
+                      className={`mt-2 w-full text-left bg-amber-50 border-2 rounded-lg px-4 py-3 transition-all duration-200 active:scale-[0.98] ${
+                        expandedMissions[quest.id]
+                          ? 'border-amber-400 shadow-md shadow-amber-200/50 bg-amber-100'
+                          : 'border-amber-200 hover:border-amber-300'
+                      }`}
+                    >
+                      <p className="text-xs text-amber-600 font-bold uppercase tracking-wider mb-1">
+                        {expandedMissions[quest.id] ? '🔓 Leo\'s Mission' : '🔒 Tap for Leo\'s Mission!'}
                       </p>
-                    </div>
+                      {expandedMissions[quest.id] && (
+                        <p className="text-sm text-amber-900 font-bold leading-relaxed">
+                          {quest.leoMission}
+                        </p>
+                      )}
+                    </button>
                   )}
 
                   {/* Confirmed badge */}
