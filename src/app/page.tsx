@@ -30,10 +30,11 @@ interface SavedState {
   packingChecked: Record<string, boolean>;
   earnedAchievements: Record<string, boolean>;
   mapTapped: Record<number, boolean>;
+  soundOn: boolean;
 }
 
 function loadSaved(): SavedState {
-  const empty: SavedState = { questCompleted: {}, packingChecked: {}, earnedAchievements: {}, mapTapped: {} };
+  const empty: SavedState = { questCompleted: {}, packingChecked: {}, earnedAchievements: {}, mapTapped: {}, soundOn: true };
   if (typeof window === 'undefined') return empty;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -41,6 +42,11 @@ function loadSaved(): SavedState {
   } catch {}
   return empty;
 }
+
+// Sound wrapper — respects mute state
+let _soundOn = true;
+function updateSoundOn(on: boolean) { _soundOn = on; }
+function sfx(fn: () => void) { if (_soundOn) fn(); }
 
 // ─── Confetti Component ───────────────────────────────────────────────────────
 
@@ -101,10 +107,19 @@ export default function Home() {
   const [earnedAchievements, setEarnedAchievements] = useState<Record<string, boolean>>({});
   const [mapTapped, setMapTapped] = useState<Record<number, boolean>>({});
   const [justEarnedAchievement, setJustEarnedAchievement] = useState<string | null>(null);
+  const [soundOn, setSoundOnState] = useState(true);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const prevDayCompleteRef = useRef<Record<string, boolean>>({});
   const prevTotalRef = useRef(0);
+
+  const toggleSound = useCallback(() => {
+    const next = !soundOn;
+    setSoundOnState(next);
+    updateSoundOn(next);
+    // Play a quick test sound when turning on
+    if (next) playStampSound();
+  }, [soundOn]);
 
   // ─── Load from localStorage ───────────────────────────────────────────────
   useEffect(() => {
@@ -113,14 +128,16 @@ export default function Home() {
     setPackingChecked(saved.packingChecked);
     setEarnedAchievements(saved.earnedAchievements);
     setMapTapped(saved.mapTapped);
+    setSoundOnState(saved.soundOn !== false);
+    updateSoundOn(saved.soundOn !== false);
     setLoaded(true);
   }, []);
 
   // ─── Save to localStorage ────────────────────────────────────────────────
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ questCompleted, packingChecked, earnedAchievements, mapTapped }));
-  }, [questCompleted, packingChecked, earnedAchievements, mapTapped, loaded]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ questCompleted, packingChecked, earnedAchievements, mapTapped, soundOn }));
+  }, [questCompleted, packingChecked, earnedAchievements, mapTapped, soundOn, loaded]);
 
   // ─── Scroll handler ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -177,7 +194,7 @@ export default function Home() {
   };
 
   const toggleMission = useCallback((questId: string) => {
-    playMissionSound();
+    sfx(playMissionSound);
     setExpandedMissions(prev => ({ ...prev, [questId]: !prev[questId] }));
   }, []);
 
@@ -187,13 +204,13 @@ export default function Home() {
 
     if (wasCompleted) {
       // Uncomplete
-      playUncollectSound();
+      sfx(playUncollectSound);
       setQuestCompleted(prev => ({ ...prev, [questId]: false }));
       return;
     }
 
     // Complete!
-    playMissionCompleteSound();
+    sfx(playMissionCompleteSound);
     const next = { ...questCompleted, [questId]: true };
     setQuestCompleted(next);
     setJustCompletedQuest(questId);
@@ -205,7 +222,7 @@ export default function Home() {
       const isNowComplete = missionIds.length > 0 && missionIds.every(id => next[id]);
       if (isNowComplete && !wasComplete) {
         setTimeout(() => {
-          playDayCompleteSound();
+          sfx(playDayCompleteSound);
           setJustCompletedDay(dayId);
           setTimeout(() => setJustCompletedDay(null), 1200);
         }, 500);
@@ -216,7 +233,7 @@ export default function Home() {
     const newTotal = Object.values(next).filter(Boolean).length;
     if (newTotal === totalMissions && prevTotalRef.current < totalMissions) {
       setTimeout(() => {
-        playVictoryFanfare();
+        sfx(playVictoryFanfare);
         setShowConfetti(true);
       }, 1000);
     }
@@ -233,9 +250,9 @@ export default function Home() {
   const togglePacking = useCallback((id: string) => {
     const wasChecked = packingChecked[id];
     if (wasChecked) {
-      playUncheckSound();
+      sfx(playUncheckSound);
     } else {
-      playCheckSound();
+      sfx(playCheckSound);
     }
     setPackingChecked(prev => ({ ...prev, [id]: !prev[id] }));
   }, [packingChecked]);
@@ -296,7 +313,7 @@ export default function Home() {
       setEarnedAchievements(newAchievements);
       if (latestNew) {
         setTimeout(() => {
-          playStampSound();
+          sfx(playStampSound);
           setJustEarnedAchievement(latestNew);
           setTimeout(() => setJustEarnedAchievement(null), 2000);
         }, 300);
@@ -314,6 +331,19 @@ export default function Home() {
   return (
     <>
       {showConfetti && <Confetti onDone={() => setShowConfetti(false)} />}
+
+      {/* Floating speaker button */}
+      <button
+        onClick={toggleSound}
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-lg transition-all duration-200 active:scale-90 flex items-center justify-center text-2xl ${
+          soundOn
+            ? 'bg-amber-500 text-white shadow-amber-500/30'
+            : 'bg-stone-300 text-stone-500 shadow-stone-300/30'
+        }`}
+        aria-label={soundOn ? 'Mute sounds' : 'Unmute sounds'}
+      >
+        {soundOn ? '🔊' : '🔇'}
+      </button>
 
       {/* Sticky nav */}
       <nav
@@ -415,7 +445,7 @@ export default function Home() {
           <h2 className="text-center text-amber-900 font-extrabold text-lg mb-4">
             🗺️ The Adventure Map
           </h2>
-          <p className="text-center text-amber-700/60 text-xs mb-3">Tap the places to hear them!</p>
+          <p className="text-center text-amber-700/60 text-xs mb-3">🔊 Tap the places to hear them!</p>
           <svg viewBox="0 0 100 100" className="w-full h-auto" style={{ maxHeight: '300px' }}>
             {/* Parchment background */}
             <rect x="0" y="0" width="100" height="100" fill="#fef3c7" rx="4" />
@@ -475,7 +505,7 @@ export default function Home() {
               return (
                 <g
                   key={`${stop.name}-${i}`}
-                  onClick={() => { playMapSound(i); setMapTapped(prev => ({ ...prev, [i]: true })); }}
+                  onClick={() => { sfx(() => playMapSound(i)); setMapTapped(prev => ({ ...prev, [i]: true })); }}
                   style={{ cursor: 'pointer' }}
                   opacity={mapAnimated ? 1 : 0}
                   className="transition-opacity duration-500"
@@ -544,7 +574,7 @@ export default function Home() {
             🎒 Explorer&apos;s Pack
           </h2>
           <p className="text-emerald-400/60 text-xs mb-4 text-center">
-            Tap each item when it&apos;s packed!
+            🔊 Tap each item when it&apos;s packed!
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {packingList.map((item) => (
@@ -885,7 +915,7 @@ export default function Home() {
                               </>
                             ) : (
                               <p className="text-xs text-amber-600 font-bold uppercase tracking-wider">
-                                🔒 Tap for Leo&apos;s Mission!
+                                🔒 Tap for Leo&apos;s Mission! 🔊
                               </p>
                             )}
                           </button>
