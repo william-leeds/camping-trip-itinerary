@@ -16,6 +16,8 @@ export interface Day {
   date: string;
   dayOfWeek: string;
   subtitle: string;
+  image: string;
+  imageAlt: string;
   activities: Activity[];
 }
 
@@ -23,12 +25,17 @@ export const tripTitle = 'Paso Robles & Terranea';
 export const tripSubtitle = 'Mar 2026';
 export const travelers = 'William, Rana & Leo';
 
+export const heroImage = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1400&q=80';
+export const heroImageAlt = 'California coastline';
+
 export const itinerary: Day[] = [
   {
     id: 'saturday',
     date: 'Mar 28',
     dayOfWeek: 'Saturday',
     subtitle: 'Wine Country & Ranch Life',
+    image: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=1200&q=80',
+    imageAlt: 'Rolling vineyard hills in Paso Robles wine country',
     activities: [
       {
         id: 'sat-1',
@@ -98,6 +105,8 @@ export const itinerary: Day[] = [
     date: 'Mar 29',
     dayOfWeek: 'Sunday',
     subtitle: 'Coastal Drive to Terranea',
+    image: 'https://images.unsplash.com/photo-1520483691742-bada60a1a1f0?w=1200&q=80',
+    imageAlt: 'Pismo Beach California coastline',
     activities: [
       {
         id: 'sun-1',
@@ -166,6 +175,8 @@ export const itinerary: Day[] = [
     date: 'Mar 30',
     dayOfWeek: 'Monday',
     subtitle: 'Pool Day & Tide Pools',
+    image: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=1200&q=80',
+    imageAlt: 'Luxury resort pool overlooking the ocean',
     activities: [
       {
         id: 'mon-1',
@@ -223,6 +234,8 @@ export const itinerary: Day[] = [
     date: 'Mar 31',
     dayOfWeek: 'Tuesday',
     subtitle: 'Journey Home',
+    image: 'https://images.unsplash.com/photo-1449034446853-66c86144b0ad?w=1200&q=80',
+    imageAlt: 'Pacific Coast Highway driving north along the California coast',
     activities: [
       {
         id: 'tue-1',

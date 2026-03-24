@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { itinerary, tripTitle, tripSubtitle, travelers } from '@/data/itinerary';
+import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt } from '@/data/itinerary';
 
 export default function Home() {
   const [scrolled, setScrolled] = useState(false);
@@ -28,7 +28,7 @@ export default function Home() {
         }`}
       >
         <div className="max-w-2xl mx-auto px-5 py-3 flex items-center justify-between">
-          <span className={`text-sm font-semibold tracking-wide transition-colors ${scrolled ? 'text-stone-800' : 'text-stone-500'}`}>
+          <span className={`text-sm font-semibold tracking-wide transition-colors ${scrolled ? 'text-stone-800' : 'text-white'}`}>
             {tripTitle}
           </span>
           <div className="flex gap-1">
@@ -39,7 +39,7 @@ export default function Home() {
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                   scrolled
                     ? 'text-stone-600 hover:bg-stone-100'
-                    : 'text-stone-400 hover:text-stone-600'
+                    : 'text-white/70 hover:text-white'
                 }`}
               >
                 {day.dayOfWeek.slice(0, 3)}
@@ -49,29 +49,45 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Header */}
-      <header className="max-w-2xl mx-auto px-5 pt-24 pb-12">
-        <h1 className="text-3xl sm:text-4xl font-bold text-stone-900 tracking-tight">
-          {tripTitle}
-        </h1>
-        <p className="text-lg text-stone-400 mt-1 font-medium">
-          {tripSubtitle}
-        </p>
-        <p className="text-sm text-stone-500 mt-4">
-          {travelers}
-        </p>
+      {/* Hero */}
+      <header className="relative h-[70vh] min-h-[400px] flex items-end overflow-hidden">
+        <img
+          src={heroImage}
+          alt={heroImageAlt}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="relative z-10 max-w-2xl mx-auto w-full px-5 pb-12">
+          <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">
+            {tripTitle}
+          </h1>
+          <p className="text-lg text-white/70 mt-1 font-medium">
+            {tripSubtitle}
+          </p>
+          <p className="text-sm text-white/50 mt-3">
+            {travelers}
+          </p>
+        </div>
       </header>
 
       {/* Days */}
-      <main className="max-w-2xl mx-auto px-5 pb-24">
+      <main className="max-w-2xl mx-auto px-5 py-16">
         {itinerary.map((day) => (
-          <section key={day.id} id={day.id} className="mb-16 scroll-mt-20">
-            {/* Day header */}
-            <div className="border-b border-stone-200 pb-3 mb-8">
-              <h2 className="text-xl font-bold text-stone-900">
-                {day.dayOfWeek} — {day.subtitle}
-              </h2>
-              <p className="text-sm text-stone-400 mt-0.5">{day.date}</p>
+          <section key={day.id} id={day.id} className="mb-20 scroll-mt-20">
+            {/* Day image banner */}
+            <div className="relative h-48 sm:h-56 rounded-xl overflow-hidden mb-6">
+              <img
+                src={day.image}
+                alt={day.imageAlt}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-5">
+                <h2 className="text-2xl font-bold text-white">
+                  {day.dayOfWeek} — {day.subtitle}
+                </h2>
+                <p className="text-sm text-white/60 mt-0.5">{day.date}</p>
+              </div>
             </div>
 
             {/* Activities */}
