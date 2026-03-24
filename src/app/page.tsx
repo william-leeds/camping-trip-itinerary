@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt, mapStops, packingList, tripStartDate } from '@/data/itinerary';
+import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt, mapStops, packingList, tripStartDate, achievements } from '@/data/itinerary';
 import { playStampSound, playUncollectSound, playMissionSound, playMissionCompleteSound, playDayCompleteSound, playVictoryFanfare, playMapSound, playCheckSound, playUncheckSound } from './sounds';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -25,13 +25,21 @@ function getTodayDayId(): string | null {
 
 const STORAGE_KEY = 'leo-adventure-v2';
 
-function loadSaved(): { questCompleted: Record<string, boolean>; packingChecked: Record<string, boolean> } {
-  if (typeof window === 'undefined') return { questCompleted: {}, packingChecked: {} };
+interface SavedState {
+  questCompleted: Record<string, boolean>;
+  packingChecked: Record<string, boolean>;
+  earnedAchievements: Record<string, boolean>;
+  mapTapped: Record<number, boolean>;
+}
+
+function loadSaved(): SavedState {
+  const empty: SavedState = { questCompleted: {}, packingChecked: {}, earnedAchievements: {}, mapTapped: {} };
+  if (typeof window === 'undefined') return empty;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return { ...empty, ...JSON.parse(raw) };
   } catch {}
-  return { questCompleted: {}, packingChecked: {} };
+  return empty;
 }
 
 // ─── Confetti Component ───────────────────────────────────────────────────────
@@ -90,6 +98,9 @@ export default function Home() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [mapAnimated, setMapAnimated] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [earnedAchievements, setEarnedAchievements] = useState<Record<string, boolean>>({});
+  const [mapTapped, setMapTapped] = useState<Record<number, boolean>>({});
+  const [justEarnedAchievement, setJustEarnedAchievement] = useState<string | null>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const prevDayCompleteRef = useRef<Record<string, boolean>>({});
@@ -100,14 +111,16 @@ export default function Home() {
     const saved = loadSaved();
     setQuestCompleted(saved.questCompleted);
     setPackingChecked(saved.packingChecked);
+    setEarnedAchievements(saved.earnedAchievements);
+    setMapTapped(saved.mapTapped);
     setLoaded(true);
   }, []);
 
   // ─── Save to localStorage ────────────────────────────────────────────────
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ questCompleted, packingChecked }));
-  }, [questCompleted, packingChecked, loaded]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ questCompleted, packingChecked, earnedAchievements, mapTapped }));
+  }, [questCompleted, packingChecked, earnedAchievements, mapTapped, loaded]);
 
   // ─── Scroll handler ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -228,6 +241,74 @@ export default function Home() {
   }, [packingChecked]);
 
   const packedCount = Object.values(packingChecked).filter(Boolean).length;
+  const mapTappedCount = Object.values(mapTapped).filter(Boolean).length;
+  const earnedCount = Object.values(earnedAchievements).filter(Boolean).length;
+
+  // ─── Achievement checking ─────────────────────────────────────────────────
+  const checkAndAwardAchievements = useCallback((
+    nextQuest: Record<string, boolean>,
+    nextPacking: Record<string, boolean>,
+    nextMapTapped: Record<number, boolean>,
+  ) => {
+    const completed = Object.values(nextQuest).filter(Boolean).length;
+    const newAchievements: Record<string, boolean> = { ...earnedAchievements };
+    let anyNew = false;
+    let latestNew: string | null = null;
+
+    const tryAward = (id: string) => {
+      if (!newAchievements[id]) { newAchievements[id] = true; anyNew = true; latestNew = id; }
+    };
+
+    if (completed >= 1) tryAward('first-mission');
+    if (completed >= 5) tryAward('five-missions');
+    if (completed >= Math.ceil(totalMissions / 2)) tryAward('half-missions');
+    if (completed >= totalMissions) tryAward('all-missions');
+
+    // Full day check
+    for (const { missionIds } of dayMissionIds) {
+      if (missionIds.length > 0 && missionIds.every(id => nextQuest[id])) {
+        tryAward('full-day');
+        break;
+      }
+    }
+
+    // Packing
+    if (Object.values(nextPacking).filter(Boolean).length >= packingList.length) tryAward('all-packed');
+
+    // Map
+    if (Object.values(nextMapTapped).filter(Boolean).length >= 5) tryAward('map-explorer');
+
+    // Time-based (secret)
+    const hour = new Date().getHours();
+    if (completed > Object.values(earnedAchievements).filter(Boolean).length || anyNew) {
+      if (hour >= 19) tryAward('night-owl');
+      if (hour < 9) tryAward('early-bird');
+    }
+
+    // Speed demon — check if 3+ missions were completed (approximation: just earned one and total >= 3)
+    if (completed >= 3 && !earnedAchievements['speed-demon']) {
+      // We award this on the 3rd mission as a fun surprise
+      const justCompletedCount = completed - (Object.values(earnedAchievements).length > 0 ? 0 : 0);
+      if (completed >= 3) tryAward('speed-demon');
+    }
+
+    if (anyNew) {
+      setEarnedAchievements(newAchievements);
+      if (latestNew) {
+        setTimeout(() => {
+          playStampSound();
+          setJustEarnedAchievement(latestNew);
+          setTimeout(() => setJustEarnedAchievement(null), 2000);
+        }, 300);
+      }
+    }
+  }, [earnedAchievements, totalMissions, dayMissionIds]);
+
+  // Trigger achievement checks when relevant state changes
+  useEffect(() => {
+    if (!loaded) return;
+    checkAndAwardAchievements(questCompleted, packingChecked, mapTapped);
+  }, [questCompleted, packingChecked, mapTapped, loaded, checkAndAwardAchievements]);
 
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
@@ -394,7 +475,7 @@ export default function Home() {
               return (
                 <g
                   key={`${stop.name}-${i}`}
-                  onClick={() => playMapSound(i)}
+                  onClick={() => { playMapSound(i); setMapTapped(prev => ({ ...prev, [i]: true })); }}
                   style={{ cursor: 'pointer' }}
                   opacity={mapAnimated ? 1 : 0}
                   className="transition-opacity duration-500"
@@ -570,6 +651,52 @@ export default function Home() {
               : daysCompleted > 0
               ? `${daysCompleted} of 4 day stamps earned!`
               : 'Complete missions to earn your stamps!'}
+          </p>
+        </div>
+      </div>
+
+      {/* Achievement Trophy Case */}
+      <div className="max-w-2xl mx-auto px-5 mt-6">
+        <div className="bg-purple-900 rounded-2xl p-5 shadow-lg">
+          <h2 className="text-purple-200 font-extrabold text-sm uppercase tracking-widest mb-1 text-center">
+            🏅 Trophy Case
+          </h2>
+          <p className="text-purple-400/60 text-xs mb-4 text-center">
+            Special achievements — can you unlock them all?
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {achievements.map((ach) => {
+              const earned = earnedAchievements[ach.id];
+              const justEarned = justEarnedAchievement === ach.id;
+              return (
+                <div
+                  key={ach.id}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all duration-500 ${
+                    earned
+                      ? 'bg-purple-500/30 shadow-md shadow-purple-500/20'
+                      : 'bg-purple-800/40 opacity-50'
+                  } ${justEarned ? 'animate-bounce' : ''}`}
+                >
+                  <span className={`text-2xl transition-all ${earned ? '' : 'grayscale'} ${justEarned ? 'animate-stamp-pop' : ''}`}>
+                    {earned || !ach.secret ? ach.emoji : '❓'}
+                  </span>
+                  <span className={`text-[10px] font-bold text-center ${earned ? 'text-purple-200' : 'text-purple-400/50'}`}>
+                    {earned || !ach.secret ? ach.name : '???'}
+                  </span>
+                  <span className={`text-[9px] text-center leading-tight ${earned ? 'text-purple-300/70' : 'text-purple-500/40'}`}>
+                    {earned || !ach.secret ? ach.description : 'Secret achievement!'}
+                  </span>
+                  {earned && <span className="text-[9px] text-purple-400">✓</span>}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-purple-400 text-xs mt-4 font-bold text-center">
+            {earnedCount === 0
+              ? 'No trophies yet — start your adventure!'
+              : earnedCount === achievements.length
+              ? '🏆 ALL TROPHIES EARNED! ULTIMATE EXPLORER! 🏆'
+              : `${earnedCount} of ${achievements.length} trophies earned!`}
           </p>
         </div>
       </div>
@@ -794,9 +921,12 @@ export default function Home() {
           <p className="text-xs text-amber-400/50 mt-2">
             {tripTitle} · {tripSubtitle}
           </p>
-          {allComplete && (
-            <p className="text-amber-300 font-bold text-xs mt-3 animate-pulse">
-              🌟 {completedMissions} missions completed · Legendary Explorer Status 🌟
+          <p className="text-amber-400/40 text-[10px] mt-3">
+            {completedMissions} missions · {daysCompleted} day stamps · {earnedCount} trophies
+          </p>
+          {allComplete && earnedCount === achievements.length && (
+            <p className="text-amber-300 font-bold text-xs mt-2 animate-pulse">
+              🌟 ULTIMATE LEGENDARY EXPLORER STATUS 🌟
             </p>
           )}
         </div>

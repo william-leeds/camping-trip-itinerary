@@ -60,6 +60,27 @@ export const packingList = [
   { id: 'blanket', emoji: '🛏️', label: 'Cozy blanket' },
 ];
 
+export interface Achievement {
+  id: string;
+  emoji: string;
+  name: string;
+  description: string;
+  secret?: boolean;
+}
+
+export const achievements: Achievement[] = [
+  { id: 'first-mission', emoji: '⭐', name: 'First Step', description: 'Complete your very first mission' },
+  { id: 'five-missions', emoji: '🔥', name: 'On Fire', description: 'Complete 5 missions' },
+  { id: 'half-missions', emoji: '🌟', name: 'Halfway Hero', description: 'Complete half of all missions' },
+  { id: 'full-day', emoji: '💪', name: 'Day Crusher', description: 'Complete every mission in a single day' },
+  { id: 'all-packed', emoji: '🎒', name: 'Ready to Go', description: 'Pack every item in the Explorer\'s Pack' },
+  { id: 'map-explorer', emoji: '🗺️', name: 'Map Explorer', description: 'Tap every location on the adventure map' },
+  { id: 'all-missions', emoji: '👑', name: 'Legendary Explorer', description: 'Complete ALL missions' },
+  { id: 'speed-demon', emoji: '⚡', name: 'Speed Demon', description: 'Complete 3 missions in a row', secret: true },
+  { id: 'night-owl', emoji: '🦉', name: 'Night Owl', description: 'Complete a mission after 7 PM', secret: true },
+  { id: 'early-bird', emoji: '🐦', name: 'Early Bird', description: 'Complete a mission before 9 AM', secret: true },
+];
+
 export const itinerary: Day[] = [
   {
     id: 'saturday',
@@ -315,6 +336,9 @@ export const itinerary: Day[] = [
         duration: '~90 min',
         title: 'Rest & Refresh',
         description: 'Back to the room. Shower off salt water. Rest before dinner.',
+        leoMission: '🫧 Mission: Take the bubbliest bath ever! Make a bubble beard and a bubble hat!',
+        questStamp: '🫧',
+        questStampName: 'Bubble King',
       },
       {
         id: 'mon-6',
@@ -370,6 +394,9 @@ export const itinerary: Day[] = [
         time: '10:30 AM',
         title: 'Check Out',
         description: 'Pack up, check out by 11 AM. Say goodbye to Terranea.',
+        leoMission: '🧳 Mission: Help pack your own suitcase! Can you fit everything inside and zip it up?',
+        questStamp: '🧳',
+        questStampName: 'Pack Master',
       },
       {
         id: 'tue-4',
@@ -389,6 +416,9 @@ export const itinerary: Day[] = [
         duration: '~75 min',
         title: 'Lunch Stop — Santa Barbara or SLO',
         description: 'Santa Barbara has beautiful State Street. San Luis Obispo is a charming college town. Both roughly halfway.',
+        leoMission: '🌴 Mission: Spot a palm tree, a seagull, and something PINK! First one to find all three wins!',
+        questStamp: '🌴',
+        questStampName: 'Sharp Eye',
         optional: true,
         link: { label: 'Downtown Santa Barbara', url: 'https://maps.google.com/?q=State+Street+Santa+Barbara+California' },
       },
