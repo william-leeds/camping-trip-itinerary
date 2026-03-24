@@ -581,20 +581,20 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Adventure Passport — Day stamps + overall progress */}
+      {/* Adventure Passport — All stamps */}
       <div className="max-w-2xl mx-auto px-5 mt-6">
         <div className="bg-amber-900 rounded-2xl p-5 shadow-lg">
           <h2 className="text-amber-200 font-extrabold text-sm uppercase tracking-widest mb-1 text-center">
             🛂 Leo&apos;s Adventure Passport
           </h2>
           <p className="text-amber-400/60 text-xs mb-4 text-center">
-            Complete missions to earn stamps! Day stamps unlock when all missions are done.
+            Complete missions to earn stamps!
           </p>
 
           {/* Overall progress bar */}
           <div className="mb-5">
             <div className="flex justify-between text-xs text-amber-400/80 font-bold mb-1">
-              <span>🎖️ {completedMissions} of {totalMissions} missions</span>
+              <span>🎖️ {completedMissions} of {totalMissions} stamps</span>
               <span>{Math.round((completedMissions / totalMissions) * 100)}%</span>
             </div>
             <div className="h-3 bg-amber-950 rounded-full overflow-hidden">
@@ -605,53 +605,74 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Day stamps */}
-          <div className="flex justify-center gap-3 sm:gap-5">
-            {itinerary.map((day) => {
-              const missionIds = day.quests.filter(q => q.leoMission).map(q => q.id);
-              const dayDone = dayCompleted[day.id];
-              const dayProgress = missionIds.filter(id => questCompleted[id]).length;
-              return (
-                <div
-                  key={day.id}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-500 ${
-                    dayDone
-                      ? 'bg-amber-500/30 scale-110 shadow-lg shadow-amber-500/20'
-                      : 'bg-amber-800/50 opacity-60'
-                  } ${justCompletedDay === day.id ? 'animate-bounce' : ''}`}
-                >
-                  <span className={`text-3xl sm:text-4xl transition-all duration-300 ${dayDone ? '' : 'grayscale'}`}>
+          {/* Stamp collection grouped by day */}
+          {itinerary.map((day) => {
+            const questsWithMissions = day.quests.filter(q => q.leoMission && q.questStamp);
+            const dayDone = dayCompleted[day.id];
+            const dayProgress = questsWithMissions.filter(q => questCompleted[q.id]).length;
+
+            return (
+              <div key={day.id} className="mb-4 last:mb-0">
+                {/* Day header with day stamp */}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-xl transition-all duration-300 ${dayDone ? '' : 'grayscale opacity-50'} ${justCompletedDay === day.id ? 'animate-stamp-pop' : ''}`}>
                     {day.stamp}
                   </span>
-                  <span className={`text-[10px] font-bold ${dayDone ? 'text-amber-200' : 'text-amber-500/50'}`}>
-                    {day.stampName}
+                  <span className={`text-xs font-bold ${dayDone ? 'text-amber-200' : 'text-amber-500/60'}`}>
+                    Day {day.id === 'saturday' ? 1 : day.id === 'sunday' ? 2 : day.id === 'monday' ? 3 : 4} — {day.stampName}
                   </span>
-                  {/* Mini progress dots */}
-                  <div className="flex gap-0.5">
-                    {missionIds.map((mid) => (
-                      <div
-                        key={mid}
-                        className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
-                          questCompleted[mid] ? 'bg-amber-400' : 'bg-amber-700'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[9px] text-amber-500/60 font-medium">
-                    {dayProgress}/{missionIds.length}
+                  <span className="text-[10px] text-amber-500/50 ml-auto">
+                    {dayProgress}/{questsWithMissions.length}
                   </span>
                 </div>
-              );
-            })}
-          </div>
 
-          <p className="text-amber-400 text-xs mt-4 font-bold text-center">
-            {allComplete
-              ? '🎉 ALL MISSIONS COMPLETE! LEGENDARY EXPLORER! 🎉'
-              : daysCompleted > 0
-              ? `${daysCompleted} of 4 day stamps earned!`
-              : 'Complete missions to earn your stamps!'}
-          </p>
+                {/* Quest stamps grid */}
+                <div className="flex flex-wrap gap-1.5 ml-7">
+                  {questsWithMissions.map((quest) => {
+                    const earned = questCompleted[quest.id];
+                    const justDone = justCompletedQuest === quest.id;
+                    return (
+                      <div
+                        key={quest.id}
+                        className={`flex flex-col items-center w-14 p-1.5 rounded-lg transition-all duration-300 ${
+                          earned
+                            ? 'bg-amber-500/20'
+                            : 'bg-amber-800/30 opacity-40'
+                        } ${justDone ? 'animate-stamp-pop' : ''}`}
+                        title={quest.questStampName}
+                      >
+                        <span className={`text-lg transition-all ${earned ? '' : 'grayscale'}`}>
+                          {quest.questStamp}
+                        </span>
+                        <span className={`text-[8px] font-bold text-center leading-tight mt-0.5 ${
+                          earned ? 'text-amber-300' : 'text-amber-600/40'
+                        }`}>
+                          {quest.questStampName}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Day complete badge */}
+                {dayDone && (
+                  <div className="ml-7 mt-1.5">
+                    <span className="text-[10px] font-bold text-emerald-400">✓ Day complete — {day.stampName} earned!</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="mt-4 pt-3 border-t border-amber-800">
+            <p className="text-amber-400 text-xs font-bold text-center">
+              {allComplete
+                ? '🎉 ALL STAMPS COLLECTED! LEGENDARY EXPLORER! 🎉'
+                : completedMissions === 0
+                ? 'No stamps yet — the adventure awaits!'
+                : `${completedMissions} of ${totalMissions} stamps collected!`}
+            </p>
+          </div>
         </div>
       </div>
 
