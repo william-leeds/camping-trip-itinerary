@@ -498,6 +498,15 @@ export default function Home() {
               );
             })()}
 
+            {/* Clip path definitions for circular images */}
+            <defs>
+              {mapStops.map((stop, i) => (
+                <clipPath key={`clip-${i}`} id={`stop-clip-${i}`}>
+                  <circle cx={stop.x} cy={stop.y} r="4.5" />
+                </clipPath>
+              ))}
+            </defs>
+
             {/* Stop markers — ALL tappable including Home return */}
             {mapStops.map((stop, i) => {
               // Skip the duplicate home at the end if it's the same as index 0
@@ -511,18 +520,35 @@ export default function Home() {
                   className="transition-opacity duration-500"
                 >
                   {/* Larger tap target */}
-                  <circle cx={stop.x} cy={stop.y} r="6" fill="transparent" />
-                  {/* Marker glow */}
-                  <circle cx={stop.x} cy={stop.y} r="4" fill="#fbbf24" opacity="0.3" />
-                  {/* Marker */}
-                  <circle cx={stop.x} cy={stop.y} r="2.5" fill="#fef3c7" stroke="#92400e" strokeWidth="0.5" />
-                  <text x={stop.x} y={stop.y + 1} fontSize="3" textAnchor="middle" dominantBaseline="middle">
-                    {stop.emoji}
-                  </text>
+                  <circle cx={stop.x} cy={stop.y} r="7" fill="transparent" />
+                  {/* Outer ring glow */}
+                  <circle cx={stop.x} cy={stop.y} r="5.5" fill="#fbbf24" opacity="0.3" />
+                  {/* Photo thumbnail */}
+                  {stop.image ? (
+                    <>
+                      <image
+                        href={stop.image}
+                        x={stop.x - 4.5}
+                        y={stop.y - 4.5}
+                        width="9"
+                        height="9"
+                        clipPath={`url(#stop-clip-${i})`}
+                        preserveAspectRatio="xMidYMid slice"
+                      />
+                      <circle cx={stop.x} cy={stop.y} r="4.5" fill="none" stroke="#92400e" strokeWidth="0.6" />
+                    </>
+                  ) : (
+                    <>
+                      <circle cx={stop.x} cy={stop.y} r="2.5" fill="#fef3c7" stroke="#92400e" strokeWidth="0.5" />
+                      <text x={stop.x} y={stop.y + 1} fontSize="3" textAnchor="middle" dominantBaseline="middle">
+                        {stop.emoji}
+                      </text>
+                    </>
+                  )}
                   {/* Label */}
                   <text
-                    x={stop.x + (i === 0 ? 5 : i === 4 ? 5 : -1)}
-                    y={stop.y + (i === 0 ? -4 : i === 2 ? -4 : i === 4 ? -5 : 6)}
+                    x={stop.x + (i === 0 ? 7 : i === 4 ? 7 : -1)}
+                    y={stop.y + (i === 0 ? -5 : i === 2 ? -5.5 : i === 4 ? -6 : 7.5)}
                     fontSize="2.2"
                     fill="#78350f"
                     fontWeight="bold"
@@ -532,8 +558,8 @@ export default function Home() {
                   {/* Day number */}
                   {i > 0 && i < 5 && (
                     <text
-                      x={stop.x + (i === 4 ? 5 : -1)}
-                      y={stop.y + (i === 2 ? -2 : i === 4 ? -3 : 8.5)}
+                      x={stop.x + (i === 4 ? 7 : -1)}
+                      y={stop.y + (i === 2 ? -3.5 : i === 4 ? -4 : 10)}
                       fontSize="1.8"
                       fill="#92400e"
                       opacity="0.6"
