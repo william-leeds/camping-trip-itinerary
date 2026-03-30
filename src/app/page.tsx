@@ -293,7 +293,7 @@ export default function Home() {
     if (Object.values(nextPacking).filter(Boolean).length >= packingList.length) tryAward('all-packed');
 
     // Map
-    if (Object.values(nextMapTapped).filter(Boolean).length >= 5) tryAward('map-explorer');
+    if (Object.values(nextMapTapped).filter(Boolean).length >= mapStops.length - 1) tryAward('map-explorer');
 
     // Time-based (secret)
     const hour = new Date().getHours();
@@ -424,10 +424,10 @@ export default function Home() {
               <p className="text-4xl font-black text-white animate-count-bounce">ADVENTURE DAY!</p>
               <p className="text-white font-bold text-sm mt-1">Let&apos;s GOOOOO! 🚗💨</p>
             </>
-          ) : countdown >= -3 ? (
+          ) : countdown >= -0 ? (
             <>
               <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-1">Adventure in progress!</p>
-              <p className="text-3xl font-black text-white">Day {Math.abs(countdown) + 1} of 4</p>
+              <p className="text-3xl font-black text-white">Road Trip Day!</p>
               <p className="text-white font-bold text-sm mt-1">Keep exploring, Leo! 🌟</p>
             </>
           ) : (
@@ -547,36 +547,36 @@ export default function Home() {
                   )}
                   {/* Label */}
                   <text
-                    x={stop.x + (i === 0 ? 7 : i === 4 ? 7 : -1)}
-                    y={stop.y + (i === 0 ? -5 : i === 2 ? -5.5 : i === 4 ? -6 : 7.5)}
+                    x={stop.x + (i === 0 ? 7 : i === mapStops.length - 2 ? 7 : -1)}
+                    y={stop.y + (i === 0 ? -5 : i === mapStops.length - 2 ? -5.5 : 7.5)}
                     fontSize="2.2"
                     fill="#78350f"
                     fontWeight="bold"
                   >
                     {stop.name}
                   </text>
-                  {/* Day number */}
-                  {i > 0 && i < 5 && (
+                  {/* Stop number */}
+                  {i > 0 && i < mapStops.length - 1 && (
                     <text
-                      x={stop.x + (i === 4 ? 7 : -1)}
-                      y={stop.y + (i === 2 ? -3.5 : i === 4 ? -4 : 10)}
+                      x={stop.x - 1}
+                      y={stop.y + 9}
                       fontSize="1.8"
                       fill="#92400e"
                       opacity="0.6"
                     >
-                      Day {i <= 2 ? 1 : i === 3 ? 2 : '3–4'}
+                      Stop {i}
                     </text>
                   )}
                 </g>
               );
             })}
 
-            {/* X marks the treasure */}
-            <text x={mapStops[4].x - 0.5} y={mapStops[4].y + 7} fontSize="3" fill="#dc2626" fontWeight="bold" opacity="0.7">
+            {/* X marks home */}
+            <text x={mapStops[mapStops.length - 1].x - 0.5} y={mapStops[mapStops.length - 1].y + 7} fontSize="3" fill="#dc2626" fontWeight="bold" opacity="0.7">
               ✕
             </text>
-            <text x={mapStops[4].x + 2} y={mapStops[4].y + 7.5} fontSize="1.8" fill="#dc2626" opacity="0.6">
-              treasure!
+            <text x={mapStops[mapStops.length - 1].x + 2} y={mapStops[mapStops.length - 1].y + 7.5} fontSize="1.8" fill="#dc2626" opacity="0.6">
+              home!
             </text>
 
             {/* Compass rose */}
@@ -675,7 +675,7 @@ export default function Home() {
                     {day.stamp}
                   </span>
                   <span className={`text-xs font-bold ${dayDone ? 'text-amber-200' : 'text-amber-500/60'}`}>
-                    Day {day.id === 'saturday' ? 1 : day.id === 'sunday' ? 2 : day.id === 'monday' ? 3 : 4} — {day.stampName}
+                    {day.dayOfWeek} — {day.stampName}
                   </span>
                   <span className="text-[10px] text-amber-500/50 ml-auto">
                     {dayProgress}/{questsWithMissions.length}
