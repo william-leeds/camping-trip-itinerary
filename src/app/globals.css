@@ -64,6 +64,15 @@ body {
   animation: count-bounce 2s ease-in-out infinite;
 }
 
+/* Leaflet custom marker overrides */
+.custom-map-marker {
+  background: none !important;
+  border: none !important;
+}
+.leaflet-container {
+  font-family: inherit;
+}
+
 /* Progress bar fill */
 @keyframes progress-fill {
   from { width: 0%; }

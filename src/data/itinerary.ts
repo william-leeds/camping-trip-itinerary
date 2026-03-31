@@ -36,11 +36,11 @@ export const tripStartDate = '2026-03-31';
 export const heroImage = 'https://images.unsplash.com/photo-1449034446853-66c86144b0ad?w=1400&q=80';
 export const heroImageAlt = 'Pacific Coast Highway driving north along the California coast';
 
-export const mapStops: { name: string; emoji: string; x: number; y: number; image?: string }[] = [
-  { name: 'Terranea', emoji: '🏰', x: 48, y: 95, image: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=400&q=80' },
-  { name: 'Bravoland', emoji: '🤠', x: 45, y: 68, image: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&q=80' },
-  { name: 'Casa de Fruta', emoji: '🍒', x: 32, y: 35, image: 'https://images.unsplash.com/photo-1506368249639-73a05d6f6488?w=400&q=80' },
-  { name: 'Home!', emoji: '🏠', x: 30, y: 15 },
+export const mapStops: { name: string; emoji: string; lat: number; lng: number; image?: string }[] = [
+  { name: 'Terranea', emoji: '🏰', lat: 33.7415, lng: -118.3872, image: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=400&q=80' },
+  { name: 'Bravoland', emoji: '🤠', lat: 35.9925, lng: -119.9614, image: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&q=80' },
+  { name: 'Casa de Fruta', emoji: '🍒', lat: 36.8611, lng: -121.4036, image: 'https://images.unsplash.com/photo-1506368249639-73a05d6f6488?w=400&q=80' },
+  { name: 'Home!', emoji: '🏠', lat: 37.7515, lng: -122.4937 },
 ];
 
 export const packingList = [

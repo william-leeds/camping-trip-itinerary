@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt, mapStops, packingList, tripStartDate } from '@/data/itinerary';
-import { playStampSound, playUncollectSound, playMissionSound, playMissionCompleteSound, playDayCompleteSound, playVictoryFanfare, playMapSound, playCheckSound, playUncheckSound } from './sounds';
+import dynamic from 'next/dynamic';
+import { itinerary, tripTitle, tripSubtitle, travelers, heroImage, heroImageAlt, packingList, tripStartDate } from '@/data/itinerary';
+import { playStampSound, playUncollectSound, playMissionSound, playMissionCompleteSound, playDayCompleteSound, playVictoryFanfare, playCheckSound, playUncheckSound } from './sounds';
+
+const AdventureMap = dynamic(() => import('./AdventureMap'), { ssr: false });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -100,11 +103,9 @@ export default function Home() {
   const [justCompletedQuest, setJustCompletedQuest] = useState<string | null>(null);
   const [justCompletedDay, setJustCompletedDay] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
-  const [mapAnimated, setMapAnimated] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [soundOn, setSoundOnState] = useState(true);
 
-  const mapRef = useRef<HTMLDivElement>(null);
   const prevDayCompleteRef = useRef<Record<string, boolean>>({});
   const prevTotalRef = useRef(0);
 
@@ -137,18 +138,6 @@ export default function Home() {
     const handleScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // ─── Map animation via Intersection Observer ─────────────────────────────
-  useEffect(() => {
-    const el = mapRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setMapAnimated(true); observer.disconnect(); } },
-      { threshold: 0.3 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
   }, []);
 
   // ─── Computed: quest & day progress ──────────────────────────────────────
@@ -364,216 +353,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Treasure Map — Full-width interactive map */}
-      <div className="max-w-3xl mx-auto px-3 mt-6" ref={mapRef}>
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl overflow-hidden shadow-xl">
-          <h2 className="text-center text-amber-900 font-extrabold text-lg pt-5 pb-1">
-            🗺️ The Adventure Map
-          </h2>
-          <p className="text-center text-amber-700/60 text-xs mb-3">🔊 Tap the places to hear them!</p>
-          <div className="relative w-full" style={{ paddingBottom: '130%' }}>
-            <svg viewBox="0 0 100 130" className="absolute inset-0 w-full h-full">
-              {/* Terrain-style background */}
-              <defs>
-                <linearGradient id="ocean" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#93c5fd" />
-                  <stop offset="100%" stopColor="#bfdbfe" />
-                </linearGradient>
-                <linearGradient id="land" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#d4a76a" />
-                  <stop offset="30%" stopColor="#c9b37e" />
-                  <stop offset="60%" stopColor="#b8a472" />
-                  <stop offset="100%" stopColor="#c9a96e" />
-                </linearGradient>
-                <filter id="terrain-shadow">
-                  <feDropShadow dx="0.5" dy="0.5" stdDeviation="0.8" floodColor="#78350f" floodOpacity="0.15" />
-                </filter>
-                {mapStops.map((stop, i) => (
-                  <clipPath key={`clip-${i}`} id={`stop-clip-${i}`}>
-                    <circle cx={stop.x} cy={stop.y} r="5.5" />
-                  </clipPath>
-                ))}
-              </defs>
-
-              {/* Ocean */}
-              <rect x="0" y="0" width="100" height="130" fill="url(#ocean)" />
-
-              {/* California landmass — detailed coastline shape */}
-              <path
-                d="M 30 2 L 42 2 L 45 5 L 48 4 L 52 6 L 55 5 L 58 7 L 60 6 L 62 8 L 65 7 L 68 9 L 72 8 L 75 10 L 78 9 L 82 11 L 85 10 L 88 12 L 90 11 L 92 13 L 95 12 L 98 14 L 100 13 L 100 130 L 70 130 L 68 125 L 65 126 L 62 122 L 58 124 L 55 120 L 52 122 L 48 118 L 45 120 L 42 116 L 38 118 L 35 114 L 32 116 L 30 112 L 28 108 L 30 104 L 32 100 L 34 97 L 36 94 L 38 92 L 42 90 L 44 88 L 42 85 L 40 83 L 38 80 L 35 78 L 32 75 L 28 72 L 25 68 L 22 65 L 20 62 L 18 58 L 16 55 L 15 52 L 14 48 L 15 44 L 16 40 L 18 36 L 20 32 L 22 28 L 24 24 L 26 20 L 28 16 L 29 12 L 30 8 Z"
-                fill="url(#land)"
-                filter="url(#terrain-shadow)"
-              />
-
-              {/* Mountain ranges */}
-              <path d="M 55 10 L 50 30 L 48 45 L 50 55 L 52 65 L 55 75 L 58 85" fill="none" stroke="#a67c52" strokeWidth="0.3" opacity="0.3" />
-              <path d="M 65 12 L 60 25 L 58 40 L 60 50 L 62 60 L 58 70" fill="none" stroke="#a67c52" strokeWidth="0.3" opacity="0.3" />
-
-              {/* Central Valley shading */}
-              <path d="M 48 15 Q 55 50 50 80 Q 42 50 48 15" fill="#c4a855" opacity="0.15" />
-
-              {/* Coast detail — wave lines */}
-              <path d="M 14 48 Q 12 52 16 55 Q 14 58 18 60" fill="none" stroke="#60a5fa" strokeWidth="0.3" opacity="0.4" />
-              <path d="M 25 68 Q 22 72 28 75 Q 24 78 30 80" fill="none" stroke="#60a5fa" strokeWidth="0.3" opacity="0.4" />
-
-              {/* Ocean labels */}
-              <text x="8" y="60" fontSize="3" fill="#3b82f6" opacity="0.35" fontWeight="bold" transform="rotate(-75, 8, 60)">PACIFIC OCEAN</text>
-
-              {/* City markers — small dots for reference */}
-              <circle cx="30" cy="15" r="0.8" fill="#92400e" opacity="0.25" />
-              <text x="32" y="16" fontSize="1.8" fill="#92400e" opacity="0.3">San Francisco</text>
-
-              <circle cx="42" cy="90" r="0.8" fill="#92400e" opacity="0.25" />
-              <text x="44" y="91" fontSize="1.8" fill="#92400e" opacity="0.3">Los Angeles</text>
-
-              <circle cx="22" cy="55" r="0.6" fill="#92400e" opacity="0.2" />
-              <text x="24" y="56" fontSize="1.5" fill="#92400e" opacity="0.25">San Luis Obispo</text>
-
-              <circle cx="32" cy="70" r="0.6" fill="#92400e" opacity="0.2" />
-              <text x="34" y="71" fontSize="1.5" fill="#92400e" opacity="0.25">Santa Barbara</text>
-
-              {/* Highway lines */}
-              <path d="M 30 15 L 28 25 L 25 35 L 24 45 L 22 55 L 25 65 L 30 72 L 38 82 L 42 90 L 48 100" fill="none" stroke="#92400e" strokeWidth="0.4" opacity="0.15" strokeDasharray="1 0.5" />
-              <text x="19" y="38" fontSize="1.3" fill="#92400e" opacity="0.2">101</text>
-              <path d="M 35 15 L 40 30 L 45 50 L 48 65 L 50 80 L 48 95" fill="none" stroke="#92400e" strokeWidth="0.4" opacity="0.15" strokeDasharray="1 0.5" />
-              <text x="42" y="55" fontSize="1.3" fill="#92400e" opacity="0.2">I-5</text>
-
-              {/* Dotted adventure trail path — animated */}
-              <path
-                d={`M ${mapStops[0].x} ${mapStops[0].y} ${mapStops.slice(1, -1).map(s => `L ${s.x} ${s.y}`).join(' ')}`}
-                fill="none"
-                stroke="#dc2626"
-                strokeWidth="1"
-                strokeDasharray={mapAnimated ? '2.5 1.5' : '0'}
-                strokeLinecap="round"
-                style={{
-                  strokeDashoffset: 0,
-                  transition: 'stroke-dasharray 2s ease-in-out',
-                }}
-                opacity={mapAnimated ? 0.7 : 0}
-              />
-              {/* Return home path */}
-              <path
-                d={`M ${mapStops[mapStops.length - 2].x} ${mapStops[mapStops.length - 2].y} L ${mapStops[mapStops.length - 1].x} ${mapStops[mapStops.length - 1].y}`}
-                fill="none"
-                stroke="#dc2626"
-                strokeWidth="0.8"
-                strokeDasharray="2 2"
-                opacity={mapAnimated ? 0.5 : 0}
-                style={{ transition: 'opacity 1s ease-in-out 1.5s' }}
-              />
-
-              {/* YOU ARE HERE — pulsing glow on today's stop */}
-              {todayDayId && (() => {
-                const today = itinerary.find(d => d.id === todayDayId);
-                if (!today) return null;
-                const stop = mapStops[today.mapStopIndex];
-                return (
-                  <>
-                    <circle cx={stop.x} cy={stop.y} r="9" fill="#f59e0b" opacity="0.2" className="animate-pulse-glow" />
-                    <circle cx={stop.x} cy={stop.y} r="7" fill="#f59e0b" opacity="0.3" className="animate-pulse-glow" />
-                  </>
-                );
-              })()}
-
-              {/* Stop markers */}
-              {mapStops.map((stop, i) => {
-                if (i === mapStops.length - 1) return null;
-                const labelRight = i === 0 || i === 2;
-                const labelX = labelRight ? stop.x + 8 : stop.x - 1;
-                const labelY = stop.y - 7;
-                return (
-                  <g
-                    key={`${stop.name}-${i}`}
-                    onClick={() => { sfx(() => playMapSound(Math.min(i, 5))); }}
-                    style={{ cursor: 'pointer' }}
-                    opacity={mapAnimated ? 1 : 0}
-                    className="transition-opacity duration-500"
-                  >
-                    {/* Larger tap target */}
-                    <circle cx={stop.x} cy={stop.y} r="9" fill="transparent" />
-                    {/* Drop shadow */}
-                    <circle cx={stop.x + 0.3} cy={stop.y + 0.3} r="6" fill="#000" opacity="0.15" />
-                    {/* Outer ring glow */}
-                    <circle cx={stop.x} cy={stop.y} r="6.5" fill="#fbbf24" opacity="0.4" />
-                    {/* Photo thumbnail */}
-                    {stop.image ? (
-                      <>
-                        <image
-                          href={stop.image}
-                          x={stop.x - 5.5}
-                          y={stop.y - 5.5}
-                          width="11"
-                          height="11"
-                          clipPath={`url(#stop-clip-${i})`}
-                          preserveAspectRatio="xMidYMid slice"
-                        />
-                        <circle cx={stop.x} cy={stop.y} r="5.5" fill="none" stroke="#fff" strokeWidth="0.8" />
-                        <circle cx={stop.x} cy={stop.y} r="6" fill="none" stroke="#92400e" strokeWidth="0.4" />
-                      </>
-                    ) : (
-                      <>
-                        <circle cx={stop.x} cy={stop.y} r="4" fill="#fef3c7" stroke="#92400e" strokeWidth="0.6" />
-                        <text x={stop.x} y={stop.y + 1.2} fontSize="4" textAnchor="middle" dominantBaseline="middle">
-                          {stop.emoji}
-                        </text>
-                      </>
-                    )}
-                    {/* Label background */}
-                    <rect
-                      x={labelX - 1}
-                      y={labelY - 2.5}
-                      width={stop.name.length * 1.7 + 2}
-                      height="4"
-                      rx="1.5"
-                      fill="#fef3c7"
-                      opacity="0.85"
-                      stroke="#92400e"
-                      strokeWidth="0.2"
-                    />
-                    {/* Label text */}
-                    <text
-                      x={labelX}
-                      y={labelY}
-                      fontSize="2.5"
-                      fill="#78350f"
-                      fontWeight="bold"
-                    >
-                      {stop.name}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* X marks home */}
-              <text x={mapStops[mapStops.length - 1].x - 1} y={mapStops[mapStops.length - 1].y + 10} fontSize="4" fill="#dc2626" fontWeight="bold" opacity="0.6">
-                ✕
-              </text>
-              <text x={mapStops[mapStops.length - 1].x + 3} y={mapStops[mapStops.length - 1].y + 10.5} fontSize="2.2" fill="#dc2626" opacity="0.5" fontWeight="bold">
-                home!
-              </text>
-
-              {/* Compass rose */}
-              <g transform="translate(88, 12)">
-                <circle cx="0" cy="0" r="6" fill="#fef3c7" opacity="0.9" stroke="#92400e" strokeWidth="0.3" />
-                <polygon points="0,-5 1,-1 -1,-1" fill="#dc2626" />
-                <polygon points="0,5 1,1 -1,1" fill="#92400e" opacity="0.4" />
-                <polygon points="-5,0 -1,1 -1,-1" fill="#92400e" opacity="0.4" />
-                <polygon points="5,0 1,1 1,-1" fill="#92400e" opacity="0.4" />
-                <text x="0" y="-6.5" fontSize="2" textAnchor="middle" fill="#dc2626" fontWeight="bold">N</text>
-                <text x="0" y="8.5" fontSize="1.5" textAnchor="middle" fill="#92400e">S</text>
-                <text x="7" y="0.8" fontSize="1.5" textAnchor="middle" fill="#92400e">E</text>
-                <text x="-7" y="0.8" fontSize="1.5" textAnchor="middle" fill="#92400e">W</text>
-              </g>
-
-              {/* Title cartouche */}
-              <rect x="2" y="118" width="40" height="8" rx="2" fill="#fef3c7" opacity="0.85" stroke="#92400e" strokeWidth="0.3" />
-              <text x="22" y="122" fontSize="2.2" fill="#78350f" fontWeight="bold" textAnchor="middle">Leo&apos;s Great Journey</text>
-              <text x="22" y="125" fontSize="2.2" fill="#78350f" fontWeight="bold" textAnchor="middle">Home Route</text>
-            </svg>
-          </div>
-        </div>
-      </div>
+      <AdventureMap sfx={sfx} />
 
       {/* Explorer's Pack — Packing Checklist */}
       <div className="max-w-2xl mx-auto px-5 mt-6">
